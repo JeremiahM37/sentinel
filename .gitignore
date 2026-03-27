@@ -1,0 +1,25 @@
+# Binary (root-level only, not cmd/sentinel/)
+/sentinel
+
+# Environment
+.env
+*.env.local
+
+# Data
+*.db
+*.db-wal
+*.db-shm
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+/dist/
+/tmp/
