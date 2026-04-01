@@ -1,5 +1,9 @@
 # Sentinel
 
+[![Build & Test](https://github.com/JeremiahM37/sentinel/actions/workflows/test.yml/badge.svg)](https://github.com/JeremiahM37/sentinel/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/JeremiahM37/sentinel?include_prereleases)](https://github.com/JeremiahM37/sentinel/releases)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 Media download guardian and library verification for the *arr ecosystem.
 
 Sentinel ensures media downloads actually land in your libraries by:
