@@ -76,3 +76,7 @@ internal/
 ## License
 
 MIT
+
+## Disclaimer
+
+This software is provided for **educational and personal use only**. Users are responsible for ensuring their use complies with all applicable laws and regulations in their jurisdiction. The developers do not condone or encourage copyright infringement or any illegal activity. This tool does not host, store, or distribute any copyrighted content.
