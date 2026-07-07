@@ -15,6 +15,8 @@ Sentinel ensures media downloads actually land in your libraries by:
 5. Retrying with alternative sources if verification fails
 6. Persisting jobs in SQLite (survives restarts)
 
+![Sentinel API session — /api/stats job counts, and a completed job whose verification_checks prove the file landed in Jellyfin with a matched title, file path and runtime](docs/screenshot.png)
+
 ## Quick Start
 
 ```bash
