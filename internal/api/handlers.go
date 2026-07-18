@@ -72,7 +72,7 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("Created job",
-		"job_id", shortID(job.ID), "title", job.Title, "media_type", job.MediaType)
+		"job_id", models.ShortID(job.ID), "title", job.Title, "media_type", job.MediaType)
 
 	writeJSON(w, http.StatusCreated, models.JobToResponse(job))
 }
@@ -161,7 +161,7 @@ func (h *Handlers) CancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("Cancelled job", "job_id", shortID(job.ID), "title", job.Title)
+	slog.Info("Cancelled job", "job_id", models.ShortID(job.ID), "title", job.Title)
 	writeJSON(w, http.StatusOK, models.JobToResponse(job))
 }
 
@@ -197,7 +197,7 @@ func (h *Handlers) RetryJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info("Retrying job", "job_id", shortID(job.ID), "title", job.Title)
+	slog.Info("Retrying job", "job_id", models.ShortID(job.ID), "title", job.Title)
 	writeJSON(w, http.StatusOK, models.JobToResponse(job))
 }
 
@@ -285,11 +285,4 @@ func queryInt(r *http.Request, key string, fallback int) int {
 		return fallback
 	}
 	return n
-}
-
-func shortID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
 }

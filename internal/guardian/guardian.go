@@ -4,6 +4,7 @@ package guardian
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -190,6 +191,13 @@ func (g *Guardian) loop(ctx context.Context) {
 	}
 }
 
+// perJobTimeout bounds how long a single job may spend in one tick. Every
+// source/library HTTP client has its own timeout, but handleSearching can
+// chain several sequential calls (search + grab per source, up to
+// MaxSourcesPerType sources), so without a per-job cap one slow service
+// could stall the whole cycle and starve the remaining jobs.
+const perJobTimeout = 2 * time.Minute
+
 func (g *Guardian) tick(ctx context.Context) {
 	jobs, err := g.db.GetActiveJobs(ctx)
 	if err != nil {
@@ -201,7 +209,15 @@ func (g *Guardian) tick(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := g.processJob(ctx, &jobs[i]); err != nil {
+		jobCtx, cancel := context.WithTimeout(ctx, perJobTimeout)
+		err := g.processJob(jobCtx, &jobs[i])
+		cancel()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				slog.Warn("Guardian: job exceeded per-job timeout, deferring to next tick",
+					"job_id", jobs[i].ID, "timeout", perJobTimeout)
+				continue
+			}
 			slog.Error("Guardian: error processing job", "job_id", jobs[i].ID, "error", err)
 		}
 	}
@@ -250,7 +266,7 @@ func (g *Guardian) handleSearching(ctx context.Context, job *models.Job) error {
 		}
 
 		slog.Info("Trying source",
-			"job_id", shortID(job.ID), "source", src.Name(), "title", job.Title)
+			"job_id", models.ShortID(job.ID), "source", src.Name(), "title", job.Title)
 
 		attempt := src.SearchAndDownload(ctx, job, g.cfg)
 		job.SourceAttempts = append(job.SourceAttempts, attempt)
@@ -299,7 +315,7 @@ func (g *Guardian) handleSearching(ctx context.Context, job *models.Job) error {
 		"Download completed but content never appeared in library after %d verification checks",
 		g.cfg.VerifyMaxChecks)
 	slog.Warn("Job failed after verification exhaustion",
-		"job_id", shortID(job.ID), "title", job.Title, "reason", reason)
+		"job_id", models.ShortID(job.ID), "title", job.Title, "reason", reason)
 	job.Status = models.JobStatusFailed
 	job.CompletedAt = &now
 	if err := g.db.UpdateJob(ctx, job); err != nil {
@@ -326,21 +342,21 @@ func (g *Guardian) handleDownloading(ctx context.Context, job *models.Job) error
 			// as "torrent not found"; leave the job downloading and retry on
 			// the next tick.
 			slog.Warn("qBittorrent status check failed, will retry",
-				"job_id", shortID(job.ID), "error", err)
+				"job_id", models.ShortID(job.ID), "error", err)
 			return nil
 		}
 
 		if isComplete == nil {
 			// Torrent not found -- might have been imported already
 			slog.Warn("Torrent not found",
-				"job_id", shortID(job.ID), "download_id", job.CurrentDownloadID)
+				"job_id", models.ShortID(job.ID), "download_id", job.CurrentDownloadID)
 			job.Status = models.JobStatusVerifying
 			return g.db.UpdateJob(ctx, job)
 		}
 
 		if *isComplete {
 			slog.Info("Download complete, moving to verification",
-				"job_id", shortID(job.ID))
+				"job_id", models.ShortID(job.ID))
 			job.Status = models.JobStatusVerifying
 			if err := g.db.UpdateJob(ctx, job); err != nil {
 				return err
@@ -381,7 +397,7 @@ func (g *Guardian) handleVerifying(ctx context.Context, job *models.Job) error {
 					"title_matched": r.TitleMatched,
 				})
 				slog.Info("VERIFIED in library",
-					"job_id", shortID(job.ID),
+					"job_id", models.ShortID(job.ID),
 					"library", r.Library,
 					"title_matched", r.TitleMatched,
 					"file_path", r.FilePath,
@@ -395,7 +411,7 @@ func (g *Guardian) handleVerifying(ctx context.Context, job *models.Job) error {
 	// Not found yet
 	if job.VerifyCount >= g.cfg.VerifyMaxChecks {
 		slog.Info("Max verify checks reached, trying next source",
-			"job_id", shortID(job.ID), "max_checks", g.cfg.VerifyMaxChecks)
+			"job_id", models.ShortID(job.ID), "max_checks", g.cfg.VerifyMaxChecks)
 		job.VerifyCount = 0
 		job.CurrentDownloadID = ""
 		job.Status = models.JobStatusSearching
@@ -421,19 +437,12 @@ func (g *Guardian) getSourcesForType(mt models.MediaType) []sources.Source {
 func (g *Guardian) sendNotification(job *models.Job, event string, details map[string]any) {
 	if g.discord.IsConfigured() {
 		if err := g.discord.Notify(job, event, details); err != nil {
-			slog.Warn("Discord notification failed", "job_id", job.ID)
+			slog.Warn("Discord notification failed", "job_id", job.ID, "error", err)
 		}
 	}
 	if g.webhook.IsConfigured() {
 		if err := g.webhook.Notify(job, event, details); err != nil {
-			slog.Warn("Webhook notification failed", "job_id", job.ID)
+			slog.Warn("Webhook notification failed", "job_id", job.ID, "error", err)
 		}
 	}
-}
-
-func shortID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
 }

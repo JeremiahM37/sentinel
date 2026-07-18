@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 	"github.com/JeremiahM37/sentinel/internal/models"
 	"github.com/JeremiahM37/sentinel/internal/titleutil"
 )
@@ -71,11 +72,11 @@ func (c *RadarrChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 	var bestScore float64
 
 	for _, movie := range allMovies {
-		movieTitle := getStr(movie, "title")
+		movieTitle := jsonmap.Str(movie, "title")
 		score := titleutil.TitleMatchScore(job.Title, movieTitle)
 
 		if job.ImdbID != "" {
-			if imdbID := getStr(movie, "imdbId"); imdbID == job.ImdbID {
+			if imdbID := jsonmap.Str(movie, "imdbId"); imdbID == job.ImdbID {
 				score = 1.0
 			}
 		}
@@ -95,19 +96,19 @@ func (c *RadarrChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 		return notFoundProof("radarr", now)
 	}
 
-	hasFile := getBool(bestMatch, "hasFile")
-	movieFile := getMap(bestMatch, "movieFile")
-	filePath := getStr(movieFile, "path")
-	size := int64(getNum(movieFile, "size"))
-	runtime := getNum(bestMatch, "runtime")
+	hasFile := jsonmap.Bool(bestMatch, "hasFile")
+	movieFile := jsonmap.Map(bestMatch, "movieFile")
+	filePath := jsonmap.Str(movieFile, "path")
+	size := int64(jsonmap.Num(movieFile, "size"))
+	runtime := jsonmap.Num(bestMatch, "runtime")
 
 	if !hasFile {
 		return models.VerificationProof{
 			Library:      "radarr",
 			Status:       models.VerificationNotFound,
-			TitleMatched: getStr(bestMatch, "title"),
+			TitleMatched: jsonmap.Str(bestMatch, "title"),
 			Extra: map[string]any{
-				"radarr_id":   getNum(bestMatch, "id"),
+				"radarr_id":   jsonmap.Num(bestMatch, "id"),
 				"reason":      "Movie exists in Radarr but has no file on disk",
 				"match_score": bestScore,
 			},
@@ -122,14 +123,14 @@ func (c *RadarrChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 	}
 
 	if filePath == "" {
-		filePath = getStr(bestMatch, "path")
+		filePath = jsonmap.Str(bestMatch, "path")
 	}
 
 	// Extract quality name
 	qualityName := "unknown"
-	if q := getMap(movieFile, "quality"); q != nil {
-		if qi := getMap(q, "quality"); qi != nil {
-			if name := getStr(qi, "name"); name != "" {
+	if q := jsonmap.Map(movieFile, "quality"); q != nil {
+		if qi := jsonmap.Map(q, "quality"); qi != nil {
+			if name := jsonmap.Str(qi, "name"); name != "" {
 				qualityName = name
 			}
 		}
@@ -138,12 +139,12 @@ func (c *RadarrChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 	return models.VerificationProof{
 		Library:        "radarr",
 		Status:         models.VerificationFound,
-		TitleMatched:   getStr(bestMatch, "title"),
+		TitleMatched:   jsonmap.Str(bestMatch, "title"),
 		FilePath:       filePath,
 		RuntimeSeconds: runtimeSeconds,
 		Extra: map[string]any{
-			"radarr_id":    fmt.Sprintf("%.0f", getNum(bestMatch, "id")),
-			"imdb_id":      getStr(bestMatch, "imdbId"),
+			"radarr_id":    fmt.Sprintf("%.0f", jsonmap.Num(bestMatch, "id")),
+			"imdb_id":      jsonmap.Str(bestMatch, "imdbId"),
 			"size_on_disk": size,
 			"quality":      qualityName,
 			"match_score":  bestScore,

@@ -59,7 +59,7 @@ func main() {
 	api.Version = Version
 
 	// Create HTTP server
-	router := api.NewRouter(database, g)
+	router := api.NewRouter(database, g, cfg)
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      router,

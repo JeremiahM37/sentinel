@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 	"github.com/JeremiahM37/sentinel/internal/models"
 )
 
@@ -103,8 +104,8 @@ func (s *JellyseerrSource) SearchAndDownload(ctx context.Context, job *models.Jo
 		return attempt
 	}
 
-	mediaTypeJS := getString(best, "mediaType", "movie")
-	tmdbID := getNumber(best, "id")
+	mediaTypeJS := jsonmap.StrOr(best, "mediaType", "movie")
+	tmdbID := jsonmap.Num(best, "id")
 
 	// Request the media
 	requestBody, _ := json.Marshal(map[string]any{
@@ -161,7 +162,7 @@ func pickBestResult(results []map[string]any, job *models.Job) map[string]any {
 
 	var candidates []map[string]any
 	for _, r := range results {
-		if getString(r, "mediaType", "") == targetType {
+		if jsonmap.StrOr(r, "mediaType", "") == targetType {
 			candidates = append(candidates, r)
 		}
 	}
@@ -172,9 +173,9 @@ func pickBestResult(results []map[string]any, job *models.Job) map[string]any {
 	if job.Year != nil {
 		yearStr := fmt.Sprintf("%d", *job.Year)
 		for _, c := range candidates {
-			release := getString(c, "releaseDate", "")
+			release := jsonmap.StrOr(c, "releaseDate", "")
 			if release == "" {
-				release = getString(c, "firstAirDate", "")
+				release = jsonmap.StrOr(c, "firstAirDate", "")
 			}
 			if strings.HasPrefix(release, yearStr) {
 				return c
@@ -186,27 +187,6 @@ func pickBestResult(results []map[string]any, job *models.Job) map[string]any {
 		return candidates[0]
 	}
 	return nil
-}
-
-func getString(m map[string]any, key, fallback string) string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return fallback
-}
-
-func getNumber(m map[string]any, key string) float64 {
-	if v, ok := m[key]; ok {
-		switch n := v.(type) {
-		case float64:
-			return n
-		case int:
-			return float64(n)
-		}
-	}
-	return 0
 }
 
 func urlEncode(s string) string {

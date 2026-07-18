@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 	"github.com/JeremiahM37/sentinel/internal/models"
 	"github.com/JeremiahM37/sentinel/internal/titleutil"
 )
@@ -100,15 +101,15 @@ func (c *AudiobookshelfChecker) Verify(ctx context.Context, job *models.Job, cfg
 
 		for _, result := range searchData.Book {
 			item := result.LibraryItem
-			media := getMap(item, "media")
-			metadata := getMap(media, "metadata")
+			media := jsonmap.Map(item, "media")
+			metadata := jsonmap.Map(media, "metadata")
 
-			itemTitle := getStr(metadata, "title")
+			itemTitle := jsonmap.Str(metadata, "title")
 			score := titleutil.TitleMatchScore(job.Title, itemTitle)
 
 			// Author match bonus
 			if job.Author != "" {
-				itemAuthor := getStr(metadata, "authorName")
+				itemAuthor := jsonmap.Str(metadata, "authorName")
 				if itemAuthor != "" && titleutil.TitleMatchScore(job.Author, itemAuthor) > 0.5 {
 					score = min64(1.0, score+0.2)
 				}
@@ -118,10 +119,10 @@ func (c *AudiobookshelfChecker) Verify(ctx context.Context, job *models.Job, cfg
 				continue
 			}
 
-			isMissing := getBool(item, "isMissing")
-			numAudioFiles := int(getNum(media, "numAudioFiles"))
-			duration := getNum(media, "duration")
-			folderPath := getStr(item, "path")
+			isMissing := jsonmap.Bool(item, "isMissing")
+			numAudioFiles := int(jsonmap.Num(media, "numAudioFiles"))
+			duration := jsonmap.Num(media, "duration")
+			folderPath := jsonmap.Str(item, "path")
 
 			if isMissing || numAudioFiles == 0 {
 				continue
@@ -136,8 +137,8 @@ func (c *AudiobookshelfChecker) Verify(ctx context.Context, job *models.Job, cfg
 				RuntimeSeconds: &runtimeSec,
 				AudioFileCount: &numAudioFiles,
 				Extra: map[string]any{
-					"abs_id":      getStr(item, "id"),
-					"author":      getStr(metadata, "authorName"),
+					"abs_id":      jsonmap.Str(item, "id"),
+					"author":      jsonmap.Str(metadata, "authorName"),
 					"match_score": score,
 					"is_missing":  isMissing,
 				},

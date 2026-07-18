@@ -51,6 +51,23 @@ docker compose up -d
 | GET | `/api/stats` | Job statistics by status |
 | POST | `/api/verify` | Manual library verification |
 
+### Authentication & CORS
+
+Both are opt-in via environment variables:
+
+- `SENTINEL_API_KEY` — when set, every `/api/*` endpoint (reads included; job
+  data reveals library contents) requires the key as an `X-Api-Key: <key>`
+  header or `Authorization: Bearer <key>`. `/health` stays open for
+  healthchecks. Unset (default) = no authentication.
+- `SENTINEL_CORS_ORIGIN` — value served as `Access-Control-Allow-Origin` for
+  browser clients. Unset (default) = no CORS headers, so cross-origin browser
+  access is blocked. Set a specific origin (recommended, e.g.
+  `https://dashboard.example.com`) or `*` to allow any origin.
+
+```bash
+curl -H "X-Api-Key: $SENTINEL_API_KEY" http://localhost:9200/api/stats
+```
+
 ## Library Verification
 
 Verification is **definitive**, not fuzzy matching:

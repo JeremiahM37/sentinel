@@ -229,6 +229,14 @@ type VerifyResponse struct {
 	Proofs    []VerificationProof `json:"proofs"`
 }
 
+// ShortID returns the first 8 characters of an ID for compact logging.
+func ShortID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
 // MustMarshalJSON marshals v to JSON, returning "null" on error.
 func MustMarshalJSON(v any) string {
 	b, err := json.Marshal(v)

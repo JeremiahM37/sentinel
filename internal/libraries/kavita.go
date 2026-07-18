@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 	"github.com/JeremiahM37/sentinel/internal/models"
 	"github.com/JeremiahM37/sentinel/internal/titleutil"
 )
@@ -113,14 +114,14 @@ func (c *KavitaChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 	}
 
 	for _, series := range searchData.Series {
-		seriesName := getStr(series, "name")
+		seriesName := jsonmap.Str(series, "name")
 		score := titleutil.TitleMatchScore(job.Title, seriesName)
 
 		if score < cfg.TitleMatchThreshold {
 			continue
 		}
 
-		seriesID := int(getNum(series, "seriesId"))
+		seriesID := int(jsonmap.Num(series, "seriesId"))
 		if seriesID == 0 {
 			continue
 		}
@@ -145,8 +146,8 @@ func (c *KavitaChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 			continue
 		}
 
-		pages := int(getNum(detail, "pages"))
-		folderPath := getStr(detail, "folderPath")
+		pages := int(jsonmap.Num(detail, "pages"))
+		folderPath := jsonmap.Str(detail, "folderPath")
 
 		if pages <= 0 {
 			continue
@@ -161,7 +162,7 @@ func (c *KavitaChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 			Extra: map[string]any{
 				"kavita_series_id": seriesID,
 				"match_score":      score,
-				"word_count":       getNum(detail, "wordCount"),
+				"word_count":       jsonmap.Num(detail, "wordCount"),
 			},
 			CheckedAt: now,
 		}

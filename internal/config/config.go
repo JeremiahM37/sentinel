@@ -13,6 +13,15 @@ type Config struct {
 	DBPath   string
 	LogLevel string
 
+	// API security
+	// APIKey, when non-empty, is required on every /api/* request
+	// (X-Api-Key header or Authorization: Bearer). /health stays open.
+	APIKey string
+	// CORSOrigin is the value served as Access-Control-Allow-Origin.
+	// Empty (the default) disables CORS entirely; set "*" to allow any
+	// origin or a specific origin like "https://dashboard.example.com".
+	CORSOrigin string
+
 	// Jellyfin
 	JellyfinURL    string
 	JellyfinAPIKey string
@@ -97,6 +106,9 @@ func Load() *Config {
 		Port:     envInt("SENTINEL_PORT", 9200),
 		DBPath:   envStr("SENTINEL_DB_PATH", "/data/sentinel.db"),
 		LogLevel: envStr("SENTINEL_LOG_LEVEL", "INFO"),
+
+		APIKey:     envStr("SENTINEL_API_KEY", ""),
+		CORSOrigin: envStr("SENTINEL_CORS_ORIGIN", ""),
 
 		JellyfinURL:    envStr("JELLYFIN_URL", ""),
 		JellyfinAPIKey: envStr("JELLYFIN_API_KEY", ""),

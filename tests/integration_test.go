@@ -44,7 +44,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, *db.JobDB) {
 	g := guardian.New(database, cfg)
 	// Don't start guardian loop for tests
 
-	router := api.NewRouter(database, g)
+	router := api.NewRouter(database, g, cfg)
 	ts := httptest.NewServer(router)
 	t.Cleanup(ts.Close)
 

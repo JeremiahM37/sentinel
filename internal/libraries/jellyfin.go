@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 	"github.com/JeremiahM37/sentinel/internal/models"
 	"github.com/JeremiahM37/sentinel/internal/titleutil"
 )
@@ -94,7 +95,7 @@ func (c *JellyfinChecker) Verify(ctx context.Context, job *models.Job, cfg *conf
 	var bestScore float64
 
 	for _, item := range data.Items {
-		itemTitle := getStr(item, "Name")
+		itemTitle := jsonmap.Str(item, "Name")
 		score := titleutil.TitleMatchScore(job.Title, itemTitle)
 
 		if job.Year != nil {
@@ -121,8 +122,8 @@ func (c *JellyfinChecker) Verify(ctx context.Context, job *models.Job, cfg *conf
 		}
 	}
 
-	filePath := getStr(bestItem, "Path")
-	runtimeTicks := getNum(bestItem, "RunTimeTicks")
+	filePath := jsonmap.Str(bestItem, "Path")
+	runtimeTicks := jsonmap.Num(bestItem, "RunTimeTicks")
 	var runtimeSeconds *float64
 	if runtimeTicks > 0 {
 		rs := runtimeTicks / 10_000_000
@@ -133,7 +134,7 @@ func (c *JellyfinChecker) Verify(ctx context.Context, job *models.Job, cfg *conf
 	if ms, ok := bestItem["MediaSources"].([]any); ok {
 		for _, s := range ms {
 			if sm, ok := s.(map[string]any); ok {
-				if p := getStr(sm, "Path"); p != "" {
+				if p := jsonmap.Str(sm, "Path"); p != "" {
 					sourcePaths = append(sourcePaths, p)
 				}
 			}
@@ -147,11 +148,11 @@ func (c *JellyfinChecker) Verify(ctx context.Context, job *models.Job, cfg *conf
 	return models.VerificationProof{
 		Library:        "jellyfin",
 		Status:         models.VerificationFound,
-		TitleMatched:   getStr(bestItem, "Name"),
+		TitleMatched:   jsonmap.Str(bestItem, "Name"),
 		FilePath:       filePath,
 		RuntimeSeconds: runtimeSeconds,
 		Extra: map[string]any{
-			"jellyfin_id":        getStr(bestItem, "Id"),
+			"jellyfin_id":        jsonmap.Str(bestItem, "Id"),
 			"year":               bestItem["ProductionYear"],
 			"match_score":        bestScore,
 			"media_source_count": len(sourcePaths),
