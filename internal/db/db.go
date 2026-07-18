@@ -41,6 +41,12 @@ CREATE INDEX IF NOT EXISTS idx_jobs_media_type ON jobs(media_type);
 CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
 `
 
+// jobColumns is the explicit column list used by every job SELECT, in the
+// exact order expected by scanJobFromScanner.
+const jobColumns = `id, title, media_type, status, year, author, imdb_id, tvdb_id,
+	source_attempts, verification_checks, current_download_id, verify_count,
+	created_at, updated_at, completed_at`
+
 // JobDB is the SQLite job store.
 type JobDB struct {
 	db *sql.DB
@@ -83,15 +89,21 @@ func (d *JobDB) Close() error {
 
 // CreateJob inserts a new job.
 func (d *JobDB) CreateJob(ctx context.Context, job *models.Job) error {
-	sa, _ := json.Marshal(job.SourceAttempts)
-	vc, _ := json.Marshal(job.VerificationChecks)
+	sa, err := json.Marshal(job.SourceAttempts)
+	if err != nil {
+		return fmt.Errorf("marshal source_attempts: %w", err)
+	}
+	vc, err := json.Marshal(job.VerificationChecks)
+	if err != nil {
+		return fmt.Errorf("marshal verification_checks: %w", err)
+	}
 	var completedAt *string
 	if job.CompletedAt != nil {
 		s := job.CompletedAt.Format(time.RFC3339Nano)
 		completedAt = &s
 	}
 
-	_, err := d.db.ExecContext(ctx,
+	_, err = d.db.ExecContext(ctx,
 		`INSERT INTO jobs (id, title, media_type, status, year, author, imdb_id, tvdb_id,
 			source_attempts, verification_checks, current_download_id, verify_count,
 			created_at, updated_at, completed_at)
@@ -110,7 +122,7 @@ func (d *JobDB) CreateJob(ctx context.Context, job *models.Job) error {
 // GetJob fetches a single job by ID. Returns nil, nil if not found.
 func (d *JobDB) GetJob(ctx context.Context, jobID string) (*models.Job, error) {
 	row := d.db.QueryRowContext(ctx,
-		"SELECT * FROM jobs WHERE id = ?", jobID)
+		"SELECT "+jobColumns+" FROM jobs WHERE id = ?", jobID)
 	j, err := scanJob(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -121,15 +133,21 @@ func (d *JobDB) GetJob(ctx context.Context, jobID string) (*models.Job, error) {
 // UpdateJob updates an existing job, setting updated_at to now.
 func (d *JobDB) UpdateJob(ctx context.Context, job *models.Job) error {
 	job.UpdatedAt = time.Now().UTC()
-	sa, _ := json.Marshal(job.SourceAttempts)
-	vc, _ := json.Marshal(job.VerificationChecks)
+	sa, err := json.Marshal(job.SourceAttempts)
+	if err != nil {
+		return fmt.Errorf("marshal source_attempts: %w", err)
+	}
+	vc, err := json.Marshal(job.VerificationChecks)
+	if err != nil {
+		return fmt.Errorf("marshal verification_checks: %w", err)
+	}
 	var completedAt *string
 	if job.CompletedAt != nil {
 		s := job.CompletedAt.Format(time.RFC3339Nano)
 		completedAt = &s
 	}
 
-	_, err := d.db.ExecContext(ctx,
+	_, err = d.db.ExecContext(ctx,
 		`UPDATE jobs SET title=?, media_type=?, status=?, year=?, author=?, imdb_id=?,
 			tvdb_id=?, source_attempts=?, verification_checks=?, current_download_id=?,
 			verify_count=?, created_at=?, updated_at=?, completed_at=?
@@ -170,7 +188,7 @@ func (d *JobDB) ListJobs(ctx context.Context, status, mediaType string, limit, o
 	}
 
 	// Fetch
-	fetchQuery := fmt.Sprintf("SELECT * FROM jobs %s ORDER BY created_at DESC LIMIT ? OFFSET ?", where)
+	fetchQuery := fmt.Sprintf("SELECT %s FROM jobs %s ORDER BY created_at DESC LIMIT ? OFFSET ?", jobColumns, where)
 	fetchArgs := append(args, limit, offset)
 	rows, err := d.db.QueryContext(ctx, fetchQuery, fetchArgs...)
 	if err != nil {
@@ -195,7 +213,7 @@ func (d *JobDB) ListJobs(ctx context.Context, status, mediaType string, limit, o
 // GetActiveJobs returns all jobs that need guardian attention.
 func (d *JobDB) GetActiveJobs(ctx context.Context) ([]models.Job, error) {
 	rows, err := d.db.QueryContext(ctx,
-		`SELECT * FROM jobs WHERE status IN (?, ?, ?, ?)
+		`SELECT `+jobColumns+` FROM jobs WHERE status IN (?, ?, ?, ?)
 		ORDER BY created_at ASC`,
 		models.JobStatusPending, models.JobStatusSearching,
 		models.JobStatusDownloading, models.JobStatusVerifying,
@@ -310,23 +328,29 @@ func scanJobFromScanner(s scanner) (*models.Job, error) {
 		j.CurrentDownloadID = currentDLID.String
 	}
 
-	j.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAtStr)
-	j.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAtStr)
+	j.CreatedAt = parseTime(j.ID, "created_at", createdAtStr)
+	j.UpdatedAt = parseTime(j.ID, "updated_at", updatedAtStr)
 	if completedAt.Valid {
-		t, _ := time.Parse(time.RFC3339Nano, completedAt.String)
+		t := parseTime(j.ID, "completed_at", completedAt.String)
 		j.CompletedAt = &t
 	}
 
 	// Unmarshal JSON arrays
 	if sourceAttemptsJSON != "" {
-		_ = json.Unmarshal([]byte(sourceAttemptsJSON), &j.SourceAttempts)
+		if err := json.Unmarshal([]byte(sourceAttemptsJSON), &j.SourceAttempts); err != nil {
+			slog.Warn("Corrupt source_attempts JSON in database",
+				"job_id", j.ID, "error", err)
+		}
 	}
 	if j.SourceAttempts == nil {
 		j.SourceAttempts = []models.SourceAttempt{}
 	}
 
 	if verificationChecksJSON != "" {
-		_ = json.Unmarshal([]byte(verificationChecksJSON), &j.VerificationChecks)
+		if err := json.Unmarshal([]byte(verificationChecksJSON), &j.VerificationChecks); err != nil {
+			slog.Warn("Corrupt verification_checks JSON in database",
+				"job_id", j.ID, "error", err)
+		}
 	}
 	if j.VerificationChecks == nil {
 		j.VerificationChecks = []models.VerificationProof{}
@@ -341,6 +365,17 @@ func scanJob(row *sql.Row) (*models.Job, error) {
 
 func scanJobRows(rows *sql.Rows) (*models.Job, error) {
 	return scanJobFromScanner(rows)
+}
+
+// parseTime parses a stored RFC3339Nano timestamp, warning (rather than
+// silently zeroing) when a stored value is malformed.
+func parseTime(jobID, column, value string) time.Time {
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		slog.Warn("Corrupt timestamp in database",
+			"job_id", jobID, "column", column, "value", value, "error", err)
+	}
+	return t
 }
 
 func nilIfEmpty(s string) *string {
