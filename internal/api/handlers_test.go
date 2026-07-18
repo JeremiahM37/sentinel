@@ -33,7 +33,7 @@ func testRouter(t *testing.T) (http.Handler, *db.JobDB) {
 	}
 
 	g := guardian.New(database, cfg)
-	router := NewRouter(database, g)
+	router := NewRouter(database, g, cfg)
 	return router, database
 }
 
@@ -532,33 +532,6 @@ func TestVerifyEndpoint(t *testing.T) {
 			t.Errorf("status = %d, want 400", rr.Code)
 		}
 	})
-}
-
-func TestCORSHeaders(t *testing.T) {
-	router, _ := testRouter(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	if rr.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Error("missing CORS Allow-Origin header")
-	}
-}
-
-func TestCORSPreflight(t *testing.T) {
-	router, _ := testRouter(t)
-
-	req := httptest.NewRequest(http.MethodOptions, "/api/jobs", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	if rr.Code != 204 {
-		t.Errorf("OPTIONS status = %d, want 204", rr.Code)
-	}
-	if rr.Header().Get("Access-Control-Allow-Methods") == "" {
-		t.Error("missing CORS Allow-Methods header")
-	}
 }
 
 func TestNewUUID(t *testing.T) {

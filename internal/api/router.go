@@ -7,40 +7,48 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/JeremiahM37/sentinel/internal/config"
 	"github.com/JeremiahM37/sentinel/internal/db"
 	"github.com/JeremiahM37/sentinel/internal/guardian"
 )
 
 // NewRouter creates the HTTP router with all routes and middleware.
-func NewRouter(database *db.JobDB, g *guardian.Guardian) http.Handler {
+func NewRouter(database *db.JobDB, g *guardian.Guardian, cfg *config.Config) http.Handler {
 	h := &Handlers{
 		DB:       database,
 		Guardian: g,
 	}
 
 	r := chi.NewRouter()
-	r.Use(CORS)
+	r.Use(CORS(cfg.CORSOrigin))
 	r.Use(Logger)
 
-	// Health
+	// Health stays unauthenticated for container healthchecks and uptime probes.
 	r.Get("/health", h.Health)
 
-	// Jobs CRUD
-	r.Post("/api/jobs", h.CreateJob)
-	r.Get("/api/jobs", h.ListJobs)
-	r.Get("/api/jobs/{jobID}", h.GetJob)
-	r.Post("/api/jobs/{jobID}/cancel", h.CancelJob)
-	r.Post("/api/jobs/{jobID}/retry", h.RetryJob)
-	r.Delete("/api/jobs/{jobID}", h.DeleteJob)
+	// Everything under /api is gated when SENTINEL_API_KEY is set. Read
+	// endpoints expose job titles and library contents, so they are
+	// protected along with the mutating ones.
+	r.Group(func(r chi.Router) {
+		r.Use(RequireAPIKey(cfg.APIKey))
 
-	// Stats
-	r.Get("/api/stats", h.GetStats)
+		// Jobs CRUD
+		r.Post("/api/jobs", h.CreateJob)
+		r.Get("/api/jobs", h.ListJobs)
+		r.Get("/api/jobs/{jobID}", h.GetJob)
+		r.Post("/api/jobs/{jobID}/cancel", h.CancelJob)
+		r.Post("/api/jobs/{jobID}/retry", h.RetryJob)
+		r.Delete("/api/jobs/{jobID}", h.DeleteJob)
 
-	// Also respond to legacy /api/status path
-	r.Get("/api/status", h.GetStats)
+		// Stats
+		r.Get("/api/stats", h.GetStats)
 
-	// Manual verification
-	r.Post("/api/verify", h.VerifyTitle)
+		// Also respond to legacy /api/status path
+		r.Get("/api/status", h.GetStats)
+
+		// Manual verification
+		r.Post("/api/verify", h.VerifyTitle)
+	})
 
 	return r
 }
