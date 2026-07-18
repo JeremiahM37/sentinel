@@ -320,7 +320,15 @@ func (g *Guardian) handleDownloading(ctx context.Context, job *models.Job) error
 	}
 
 	if g.qbit.IsAvailable(ctx) {
-		isComplete := g.qbit.IsDownloadComplete(ctx, job.CurrentDownloadID)
+		isComplete, err := g.qbit.IsDownloadComplete(ctx, job.CurrentDownloadID)
+		if err != nil {
+			// Status check itself failed (auth/transport) -- don't treat this
+			// as "torrent not found"; leave the job downloading and retry on
+			// the next tick.
+			slog.Warn("qBittorrent status check failed, will retry",
+				"job_id", shortID(job.ID), "error", err)
+			return nil
+		}
 
 		if isComplete == nil {
 			// Torrent not found -- might have been imported already

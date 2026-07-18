@@ -94,61 +94,85 @@ type TorrentStatus struct {
 }
 
 // GetTorrentStatus returns the status of a torrent by its Sentinel tag.
-// Returns nil if the torrent is not found or an error occurs.
-func (m *QBittorrentMonitor) GetTorrentStatus(ctx context.Context, tag string) *TorrentStatus {
+// Returns (nil, nil) if the torrent is genuinely not found, and a non-nil
+// error for auth or transport failures so callers don't mistake an expired
+// session for a missing torrent. If qBittorrent rejects the cached session
+// cookie, the cookie is cleared and authentication is retried once.
+func (m *QBittorrentMonitor) GetTorrentStatus(ctx context.Context, tag string) (*TorrentStatus, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	if !m.ensureAuth(ctx, client) {
-		return nil
+
+	for attempt := 0; attempt < 2; attempt++ {
+		if !m.ensureAuth(ctx, client) {
+			return nil, fmt.Errorf("qBittorrent authentication failed")
+		}
+
+		reqURL := fmt.Sprintf("%s/api/v2/torrents/info?tag=%s",
+			m.cfg.QBittorrentURL, url.QueryEscape(tag))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		if m.cookie != "" {
+			req.AddCookie(&http.Cookie{Name: "SID", Value: m.cookie})
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			slog.Warn("qBittorrent status check failed", "error", err)
+			return nil, err
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			if attempt == 0 {
+				// Session likely expired -- drop the cached cookie and
+				// re-authenticate once before giving up.
+				slog.Warn("qBittorrent rejected session, re-authenticating",
+					"status", resp.StatusCode)
+				m.cookie = ""
+				continue
+			}
+			return nil, fmt.Errorf("qBittorrent returned status %d after re-authentication", resp.StatusCode)
+		}
+
+		var torrents []map[string]any
+		if err := json.Unmarshal(body, &torrents); err != nil {
+			return nil, fmt.Errorf("qBittorrent returned invalid JSON: %w", err)
+		}
+		if len(torrents) == 0 {
+			return nil, nil // torrent genuinely not found
+		}
+
+		t := torrents[0]
+		return &TorrentStatus{
+			State:      getString(t, "state", "unknown"),
+			Progress:   getNumber(t, "progress"),
+			Name:       getString(t, "name", ""),
+			Size:       int64(getNumber(t, "size")),
+			Downloaded: int64(getNumber(t, "downloaded")),
+			ETA:        int64(getNumber(t, "eta")),
+			Seeds:      int(getNumber(t, "num_seeds")),
+			Hash:       getString(t, "hash", ""),
+		}, nil
 	}
 
-	reqURL := fmt.Sprintf("%s/api/v2/torrents/info?tag=%s",
-		m.cfg.QBittorrentURL, url.QueryEscape(tag))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil
-	}
-	if m.cookie != "" {
-		req.AddCookie(&http.Cookie{Name: "SID", Value: m.cookie})
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Warn("qBittorrent status check failed", "error", err)
-		return nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	var torrents []map[string]any
-	if err := json.Unmarshal(body, &torrents); err != nil || len(torrents) == 0 {
-		return nil
-	}
-
-	t := torrents[0]
-	return &TorrentStatus{
-		State:      getString(t, "state", "unknown"),
-		Progress:   getNumber(t, "progress"),
-		Name:       getString(t, "name", ""),
-		Size:       int64(getNumber(t, "size")),
-		Downloaded: int64(getNumber(t, "downloaded")),
-		ETA:        int64(getNumber(t, "eta")),
-		Seeds:      int(getNumber(t, "num_seeds")),
-		Hash:       getString(t, "hash", ""),
-	}
+	return nil, fmt.Errorf("qBittorrent status check failed")
 }
 
 // IsDownloadComplete checks if a tagged torrent has finished downloading.
-// Returns: true=complete, false=still downloading, nil pointer means not found.
-func (m *QBittorrentMonitor) IsDownloadComplete(ctx context.Context, tag string) *bool {
-	status := m.GetTorrentStatus(ctx, tag)
+// Returns: true=complete, false=still downloading, nil pointer means not
+// found. A non-nil error indicates the check itself failed (auth/transport),
+// not that the torrent is missing.
+func (m *QBittorrentMonitor) IsDownloadComplete(ctx context.Context, tag string) (*bool, error) {
+	status, err := m.GetTorrentStatus(ctx, tag)
+	if err != nil {
+		return nil, err
+	}
 	if status == nil {
-		return nil
+		return nil, nil
 	}
 
 	complete := completionStates[status.State] || status.Progress >= 1.0
-	return &complete
+	return &complete, nil
 }

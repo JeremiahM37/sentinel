@@ -415,7 +415,10 @@ func TestQBittorrentIsDownloadComplete(t *testing.T) {
 				QBittorrentURL: ts.URL, QBittorrentUser: "admin", QBittorrentPass: "pass",
 			})
 
-			result := m.IsDownloadComplete(context.Background(), "sentinel:Test")
+			result, err := m.IsDownloadComplete(context.Background(), "sentinel:Test")
+			if err != nil {
+				t.Fatalf("IsDownloadComplete: %v", err)
+			}
 			if tc.wantDone == nil {
 				if result != nil {
 					t.Errorf("expected nil, got %v", *result)
@@ -447,7 +450,10 @@ func TestQBittorrentIsDownloadCompleteNotFound(t *testing.T) {
 		QBittorrentURL: ts.URL, QBittorrentUser: "admin", QBittorrentPass: "pass",
 	})
 
-	result := m.IsDownloadComplete(context.Background(), "sentinel:Missing")
+	result, err := m.IsDownloadComplete(context.Background(), "sentinel:Missing")
+	if err != nil {
+		t.Fatalf("IsDownloadComplete: %v", err)
+	}
 	if result != nil {
 		t.Errorf("expected nil for not found, got %v", *result)
 	}
@@ -480,7 +486,10 @@ func TestGetTorrentStatus(t *testing.T) {
 		QBittorrentURL: ts.URL, QBittorrentUser: "admin", QBittorrentPass: "pass",
 	})
 
-	status := m.GetTorrentStatus(context.Background(), "sentinel:Test")
+	status, err := m.GetTorrentStatus(context.Background(), "sentinel:Test")
+	if err != nil {
+		t.Fatalf("GetTorrentStatus: %v", err)
+	}
 	if status == nil {
 		t.Fatal("expected non-nil status")
 	}
@@ -495,6 +504,75 @@ func TestGetTorrentStatus(t *testing.T) {
 	}
 	if status.Seeds != 10 {
 		t.Errorf("Seeds = %d", status.Seeds)
+	}
+}
+
+func TestGetTorrentStatusExpiredSession(t *testing.T) {
+	// First session cookie is rejected with 403 (expired); the monitor should
+	// clear the cached cookie, re-authenticate, and succeed with the new one.
+	loginCount := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			loginCount++
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: fmt.Sprintf("sid-%d", loginCount)})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/info":
+			cookie, err := r.Cookie("SID")
+			if err != nil || cookie.Value != "sid-2" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"state": "downloading", "progress": 0.5, "name": "Test", "hash": "abc"},
+			})
+		}
+	}))
+	defer ts.Close()
+
+	m := NewQBittorrentMonitor(&config.Config{
+		QBittorrentURL: ts.URL, QBittorrentUser: "admin", QBittorrentPass: "pass",
+	})
+
+	status, err := m.GetTorrentStatus(context.Background(), "sentinel:Test")
+	if err != nil {
+		t.Fatalf("GetTorrentStatus after re-auth: %v", err)
+	}
+	if status == nil {
+		t.Fatal("expected non-nil status after re-authentication")
+	}
+	if status.State != "downloading" {
+		t.Errorf("State = %q", status.State)
+	}
+	if loginCount != 2 {
+		t.Errorf("loginCount = %d, want 2 (initial auth + re-auth)", loginCount)
+	}
+}
+
+func TestGetTorrentStatusPersistentAuthFailure(t *testing.T) {
+	// qBittorrent keeps rejecting the session even after re-auth: this must
+	// surface as an error, not be mistaken for "torrent not found" (nil, nil).
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "sid"})
+			fmt.Fprint(w, "Ok.")
+		case "/api/v2/torrents/info":
+			w.WriteHeader(http.StatusForbidden)
+		}
+	}))
+	defer ts.Close()
+
+	m := NewQBittorrentMonitor(&config.Config{
+		QBittorrentURL: ts.URL, QBittorrentUser: "admin", QBittorrentPass: "pass",
+	})
+
+	status, err := m.GetTorrentStatus(context.Background(), "sentinel:Test")
+	if err == nil {
+		t.Fatal("expected error on persistent 403, got nil")
+	}
+	if status != nil {
+		t.Errorf("expected nil status on auth failure, got %+v", status)
 	}
 }
 
