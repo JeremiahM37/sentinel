@@ -4,6 +4,7 @@ package guardian
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -277,8 +278,8 @@ func (g *Guardian) handleSearching(ctx context.Context, job *models.Job) error {
 		}
 	}
 
+	now := time.Now().UTC()
 	if !hasSuccess {
-		now := time.Now().UTC()
 		job.Status = models.JobStatusFailed
 		job.CompletedAt = &now
 		if err := g.db.UpdateJob(ctx, job); err != nil {
@@ -288,7 +289,26 @@ func (g *Guardian) handleSearching(ctx context.Context, job *models.Job) error {
 			"reason":   "All sources exhausted",
 			"attempts": len(job.SourceAttempts),
 		})
+		return nil
 	}
+
+	// A source already reported a successful download, but the content never
+	// verified in the library and no untried sources remain. Without a terminal
+	// state here the job would bounce between verifying and searching forever.
+	reason := fmt.Sprintf(
+		"Download completed but content never appeared in library after %d verification checks",
+		g.cfg.VerifyMaxChecks)
+	slog.Warn("Job failed after verification exhaustion",
+		"job_id", shortID(job.ID), "title", job.Title, "reason", reason)
+	job.Status = models.JobStatusFailed
+	job.CompletedAt = &now
+	if err := g.db.UpdateJob(ctx, job); err != nil {
+		return err
+	}
+	g.sendNotification(job, "failed", map[string]any{
+		"reason":   reason,
+		"attempts": len(job.SourceAttempts),
+	})
 
 	return nil
 }
@@ -300,7 +320,15 @@ func (g *Guardian) handleDownloading(ctx context.Context, job *models.Job) error
 	}
 
 	if g.qbit.IsAvailable(ctx) {
-		isComplete := g.qbit.IsDownloadComplete(ctx, job.CurrentDownloadID)
+		isComplete, err := g.qbit.IsDownloadComplete(ctx, job.CurrentDownloadID)
+		if err != nil {
+			// Status check itself failed (auth/transport) -- don't treat this
+			// as "torrent not found"; leave the job downloading and retry on
+			// the next tick.
+			slog.Warn("qBittorrent status check failed, will retry",
+				"job_id", shortID(job.ID), "error", err)
+			return nil
+		}
 
 		if isComplete == nil {
 			// Torrent not found -- might have been imported already
