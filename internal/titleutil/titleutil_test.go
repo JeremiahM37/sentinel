@@ -6,10 +6,10 @@ import (
 
 func TestTitleMatchScore(t *testing.T) {
 	tests := []struct {
-		name     string
-		a, b     string
-		wantMin  float64
-		wantMax  float64
+		name    string
+		a, b    string
+		wantMin float64
+		wantMax float64
 	}{
 		{
 			name:    "exact match",

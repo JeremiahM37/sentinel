@@ -271,11 +271,11 @@ type scanner interface {
 func scanJobFromScanner(s scanner) (*models.Job, error) {
 	var j models.Job
 	var (
-		year, tvdbID                                          sql.NullInt64
-		author, imdbID, currentDLID, completedAt              sql.NullString
-		sourceAttemptsJSON, verificationChecksJSON            string
-		createdAtStr, updatedAtStr                            string
-		mediaType, status                                     string
+		year, tvdbID                               sql.NullInt64
+		author, imdbID, currentDLID, completedAt   sql.NullString
+		sourceAttemptsJSON, verificationChecksJSON string
+		createdAtStr, updatedAtStr                 string
+		mediaType, status                          string
 	)
 
 	err := s.Scan(

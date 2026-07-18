@@ -269,15 +269,15 @@ func TestGuardianDownloadingComplete(t *testing.T) {
 
 	now := time.Now().UTC()
 	job := &models.Job{
-		ID:                "dl-complete",
-		Title:             "Downloading Movie",
-		MediaType:         models.MediaTypeMovie,
-		Status:            models.JobStatusDownloading,
-		CurrentDownloadID: "sentinel:Downloading Movie",
-		SourceAttempts:    []models.SourceAttempt{},
+		ID:                 "dl-complete",
+		Title:              "Downloading Movie",
+		MediaType:          models.MediaTypeMovie,
+		Status:             models.JobStatusDownloading,
+		CurrentDownloadID:  "sentinel:Downloading Movie",
+		SourceAttempts:     []models.SourceAttempt{},
 		VerificationChecks: []models.VerificationProof{},
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	database.CreateJob(context.Background(), job)
 
@@ -396,10 +396,10 @@ func TestGuardianVerifyingMaxChecksWithSuccessfulAttemptFails(t *testing.T) {
 
 	now := time.Now().UTC()
 	job := &models.Job{
-		ID:        "verify-max-success",
-		Title:     "Never Imported",
-		MediaType: models.MediaTypeMovie,
-		Status:    models.JobStatusVerifying,
+		ID:          "verify-max-success",
+		Title:       "Never Imported",
+		MediaType:   models.MediaTypeMovie,
+		Status:      models.JobStatusVerifying,
 		VerifyCount: 1, // one less than max
 		SourceAttempts: []models.SourceAttempt{
 			{SourceName: "prowlarr", StartedAt: now, FinishedAt: &now, Success: true, DownloadID: "sentinel:Never Imported"},
@@ -485,15 +485,15 @@ func TestGuardianDownloadingTorrentNotFound(t *testing.T) {
 
 	now := time.Now().UTC()
 	job := &models.Job{
-		ID:                "dl-gone",
-		Title:             "Gone Torrent",
-		MediaType:         models.MediaTypeMovie,
-		Status:            models.JobStatusDownloading,
-		CurrentDownloadID: "sentinel:Gone",
-		SourceAttempts:    []models.SourceAttempt{},
+		ID:                 "dl-gone",
+		Title:              "Gone Torrent",
+		MediaType:          models.MediaTypeMovie,
+		Status:             models.JobStatusDownloading,
+		CurrentDownloadID:  "sentinel:Gone",
+		SourceAttempts:     []models.SourceAttempt{},
 		VerificationChecks: []models.VerificationProof{},
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	database.CreateJob(context.Background(), job)
 
@@ -530,15 +530,15 @@ func TestGuardianStillDownloading(t *testing.T) {
 
 	now := time.Now().UTC()
 	job := &models.Job{
-		ID:                "still-dl",
-		Title:             "Still DL",
-		MediaType:         models.MediaTypeMovie,
-		Status:            models.JobStatusDownloading,
-		CurrentDownloadID: "sentinel:Still",
-		SourceAttempts:    []models.SourceAttempt{},
+		ID:                 "still-dl",
+		Title:              "Still DL",
+		MediaType:          models.MediaTypeMovie,
+		Status:             models.JobStatusDownloading,
+		CurrentDownloadID:  "sentinel:Still",
+		SourceAttempts:     []models.SourceAttempt{},
 		VerificationChecks: []models.VerificationProof{},
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	database.CreateJob(context.Background(), job)
 

@@ -219,8 +219,8 @@ func TestProwlarrSearchAndDownloadSuccess(t *testing.T) {
 				"size":        15000000000.0,
 			},
 			{
-				"title":    "The Matrix 1999 720p",
-				"seeders":  50.0,
+				"title":     "The Matrix 1999 720p",
+				"seeders":   50.0,
 				"magnetUrl": "magnet:?xt=urn:btih:abc123",
 			},
 		})
@@ -229,8 +229,8 @@ func TestProwlarrSearchAndDownloadSuccess(t *testing.T) {
 
 	s := &ProwlarrSource{}
 	cfg := &config.Config{
-		ProwlarrURL:    prowlarrServer.URL,
-		ProwlarrAPIKey: "key",
+		ProwlarrURL:     prowlarrServer.URL,
+		ProwlarrAPIKey:  "key",
 		QBittorrentURL:  qbitServer.URL,
 		QBittorrentUser: "admin",
 		QBittorrentPass: "pass",
