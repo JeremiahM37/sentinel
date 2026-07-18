@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 	"github.com/JeremiahM37/sentinel/internal/models"
 )
 
@@ -121,15 +122,15 @@ func (s *ProwlarrSource) SearchAndDownload(ctx context.Context, job *models.Job,
 
 	// Sort by seeders descending
 	sort.Slice(results, func(i, j int) bool {
-		si := getNumber(results[i], "seeders")
-		sj := getNumber(results[j], "seeders")
+		si := jsonmap.Num(results[i], "seeders")
+		sj := jsonmap.Num(results[j], "seeders")
 		return si > sj
 	})
 
 	best := results[0]
-	downloadURL := getString(best, "downloadUrl", "")
+	downloadURL := jsonmap.StrOr(best, "downloadUrl", "")
 	if downloadURL == "" {
-		downloadURL = getString(best, "magnetUrl", "")
+		downloadURL = jsonmap.StrOr(best, "magnetUrl", "")
 	}
 	if downloadURL == "" {
 		attempt.ErrorMessage = "Best result has no download URL"
@@ -153,8 +154,8 @@ func (s *ProwlarrSource) SearchAndDownload(ctx context.Context, job *models.Job,
 
 	attempt.FinishedAt = timePtr(time.Now().UTC())
 	slog.Info("Prowlarr found release",
-		"title", getString(best, "title", "?"),
-		"seeders", getNumber(best, "seeders"),
+		"title", jsonmap.StrOr(best, "title", "?"),
+		"seeders", jsonmap.Num(best, "seeders"),
 		"job_title", job.Title,
 	)
 

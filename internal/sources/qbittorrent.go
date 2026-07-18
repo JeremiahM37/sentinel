@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 )
 
 // completionStates are qBittorrent states that indicate a download is done.
@@ -146,14 +147,14 @@ func (m *QBittorrentMonitor) GetTorrentStatus(ctx context.Context, tag string) (
 
 		t := torrents[0]
 		return &TorrentStatus{
-			State:      getString(t, "state", "unknown"),
-			Progress:   getNumber(t, "progress"),
-			Name:       getString(t, "name", ""),
-			Size:       int64(getNumber(t, "size")),
-			Downloaded: int64(getNumber(t, "downloaded")),
-			ETA:        int64(getNumber(t, "eta")),
-			Seeds:      int(getNumber(t, "num_seeds")),
-			Hash:       getString(t, "hash", ""),
+			State:      jsonmap.StrOr(t, "state", "unknown"),
+			Progress:   jsonmap.Num(t, "progress"),
+			Name:       jsonmap.StrOr(t, "name", ""),
+			Size:       int64(jsonmap.Num(t, "size")),
+			Downloaded: int64(jsonmap.Num(t, "downloaded")),
+			ETA:        int64(jsonmap.Num(t, "eta")),
+			Seeds:      int(jsonmap.Num(t, "num_seeds")),
+			Hash:       jsonmap.StrOr(t, "hash", ""),
 		}, nil
 	}
 

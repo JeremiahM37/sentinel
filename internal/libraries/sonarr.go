@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/JeremiahM37/sentinel/internal/config"
+	"github.com/JeremiahM37/sentinel/internal/jsonmap"
 	"github.com/JeremiahM37/sentinel/internal/models"
 	"github.com/JeremiahM37/sentinel/internal/titleutil"
 )
@@ -71,7 +72,7 @@ func (c *SonarrChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 	var bestScore float64
 
 	for _, series := range allSeries {
-		seriesTitle := getStr(series, "title")
+		seriesTitle := jsonmap.Str(series, "title")
 		score := titleutil.TitleMatchScore(job.Title, seriesTitle)
 
 		if job.TvdbID != nil {
@@ -95,19 +96,19 @@ func (c *SonarrChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 		return notFoundProof("sonarr", now)
 	}
 
-	statistics := getMap(bestMatch, "statistics")
-	episodeFileCount := int(getNum(statistics, "episodeFileCount"))
-	totalEpisodes := int(getNum(statistics, "totalEpisodeCount"))
-	sizeOnDisk := int64(getNum(statistics, "sizeOnDisk"))
-	path := getStr(bestMatch, "path")
+	statistics := jsonmap.Map(bestMatch, "statistics")
+	episodeFileCount := int(jsonmap.Num(statistics, "episodeFileCount"))
+	totalEpisodes := int(jsonmap.Num(statistics, "totalEpisodeCount"))
+	sizeOnDisk := int64(jsonmap.Num(statistics, "sizeOnDisk"))
+	path := jsonmap.Str(bestMatch, "path")
 
 	if episodeFileCount == 0 {
 		return models.VerificationProof{
 			Library:      "sonarr",
 			Status:       models.VerificationNotFound,
-			TitleMatched: getStr(bestMatch, "title"),
+			TitleMatched: jsonmap.Str(bestMatch, "title"),
 			Extra: map[string]any{
-				"sonarr_id":   getNum(bestMatch, "id"),
+				"sonarr_id":   jsonmap.Num(bestMatch, "id"),
 				"reason":      "Series exists but has no episode files",
 				"match_score": bestScore,
 			},
@@ -118,10 +119,10 @@ func (c *SonarrChecker) Verify(ctx context.Context, job *models.Job, cfg *config
 	return models.VerificationProof{
 		Library:      "sonarr",
 		Status:       models.VerificationFound,
-		TitleMatched: getStr(bestMatch, "title"),
+		TitleMatched: jsonmap.Str(bestMatch, "title"),
 		FilePath:     path,
 		Extra: map[string]any{
-			"sonarr_id":          fmt.Sprintf("%.0f", getNum(bestMatch, "id")),
+			"sonarr_id":          fmt.Sprintf("%.0f", jsonmap.Num(bestMatch, "id")),
 			"episode_file_count": episodeFileCount,
 			"total_episodes":     totalEpisodes,
 			"size_on_disk":       sizeOnDisk,

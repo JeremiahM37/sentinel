@@ -596,12 +596,3 @@ func TestQueryInt(t *testing.T) {
 		}
 	}
 }
-
-func TestShortIDAPI(t *testing.T) {
-	if shortID("abcdefghij") != "abcdefgh" {
-		t.Error("shortID long")
-	}
-	if shortID("abc") != "abc" {
-		t.Error("shortID short")
-	}
-}

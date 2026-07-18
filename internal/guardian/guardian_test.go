@@ -456,9 +456,9 @@ func TestShortID(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := shortID(tc.input)
+		got := models.ShortID(tc.input)
 		if got != tc.expected {
-			t.Errorf("shortID(%q) = %q, want %q", tc.input, got, tc.expected)
+			t.Errorf("ShortID(%q) = %q, want %q", tc.input, got, tc.expected)
 		}
 	}
 }
