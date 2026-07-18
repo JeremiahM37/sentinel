@@ -347,6 +347,78 @@ func TestGuardianVerifyingMaxChecks(t *testing.T) {
 	}
 }
 
+func TestGuardianSearchingAfterVerifyExhaustionFails(t *testing.T) {
+	// Reproduces the forever-stuck bug: a job whose download succeeded but
+	// never verified in the library is reset to "searching" once
+	// VerifyMaxChecks is exhausted. All sources are already in SourceAttempts
+	// and one succeeded, so handleSearching had no untried source to retry and
+	// no failure branch either -- the job looped in "searching" forever. It
+	// must now terminate as failed.
+	database, cfg := testSetup(t)
+	g := New(database, cfg)
+
+	now := time.Now().UTC()
+	job := &models.Job{
+		ID:        "stuck-searching",
+		Title:     "Ghost Download",
+		MediaType: models.MediaTypeMovie,
+		Status:    models.JobStatusSearching,
+		SourceAttempts: []models.SourceAttempt{
+			{SourceName: "jellyseerr", StartedAt: now, FinishedAt: &now, Success: false, ErrorMessage: "not found"},
+			{SourceName: "prowlarr", StartedAt: now, FinishedAt: &now, Success: true, DownloadID: "sentinel:Ghost Download"},
+		},
+		VerificationChecks: []models.VerificationProof{},
+		VerifyCount:        0, // reset by the verify-exhausted path
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	database.CreateJob(context.Background(), job)
+
+	ctx := context.Background()
+	g.tick(ctx)
+
+	updated, _ := database.GetJob(ctx, "stuck-searching")
+	if updated.Status != models.JobStatusFailed {
+		t.Errorf("Status = %q, want failed (job must not loop in searching)", updated.Status)
+	}
+	if updated.CompletedAt == nil {
+		t.Error("CompletedAt should be set on terminal failure")
+	}
+}
+
+func TestGuardianVerifyingMaxChecksWithSuccessfulAttemptFails(t *testing.T) {
+	// Full path variant: job is verifying with a successful source attempt on
+	// record. When the last verification check is spent it goes back to
+	// searching, finds nothing left to try, and must fail terminally.
+	database, cfg := testSetup(t)
+	cfg.VerifyMaxChecks = 2
+	g := New(database, cfg)
+
+	now := time.Now().UTC()
+	job := &models.Job{
+		ID:        "verify-max-success",
+		Title:     "Never Imported",
+		MediaType: models.MediaTypeMovie,
+		Status:    models.JobStatusVerifying,
+		VerifyCount: 1, // one less than max
+		SourceAttempts: []models.SourceAttempt{
+			{SourceName: "prowlarr", StartedAt: now, FinishedAt: &now, Success: true, DownloadID: "sentinel:Never Imported"},
+		},
+		VerificationChecks: []models.VerificationProof{},
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	database.CreateJob(context.Background(), job)
+
+	ctx := context.Background()
+	g.tick(ctx)
+
+	updated, _ := database.GetJob(ctx, "verify-max-success")
+	if updated.Status != models.JobStatusFailed {
+		t.Errorf("Status = %q, want failed (verify exhausted, no sources left)", updated.Status)
+	}
+}
+
 func TestGuardianNotifications(t *testing.T) {
 	var notificationCount int
 	discordServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
