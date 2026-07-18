@@ -4,6 +4,7 @@ package guardian
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -190,6 +191,13 @@ func (g *Guardian) loop(ctx context.Context) {
 	}
 }
 
+// perJobTimeout bounds how long a single job may spend in one tick. Every
+// source/library HTTP client has its own timeout, but handleSearching can
+// chain several sequential calls (search + grab per source, up to
+// MaxSourcesPerType sources), so without a per-job cap one slow service
+// could stall the whole cycle and starve the remaining jobs.
+const perJobTimeout = 2 * time.Minute
+
 func (g *Guardian) tick(ctx context.Context) {
 	jobs, err := g.db.GetActiveJobs(ctx)
 	if err != nil {
@@ -201,7 +209,15 @@ func (g *Guardian) tick(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := g.processJob(ctx, &jobs[i]); err != nil {
+		jobCtx, cancel := context.WithTimeout(ctx, perJobTimeout)
+		err := g.processJob(jobCtx, &jobs[i])
+		cancel()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				slog.Warn("Guardian: job exceeded per-job timeout, deferring to next tick",
+					"job_id", jobs[i].ID, "timeout", perJobTimeout)
+				continue
+			}
 			slog.Error("Guardian: error processing job", "job_id", jobs[i].ID, "error", err)
 		}
 	}
@@ -421,12 +437,12 @@ func (g *Guardian) getSourcesForType(mt models.MediaType) []sources.Source {
 func (g *Guardian) sendNotification(job *models.Job, event string, details map[string]any) {
 	if g.discord.IsConfigured() {
 		if err := g.discord.Notify(job, event, details); err != nil {
-			slog.Warn("Discord notification failed", "job_id", job.ID)
+			slog.Warn("Discord notification failed", "job_id", job.ID, "error", err)
 		}
 	}
 	if g.webhook.IsConfigured() {
 		if err := g.webhook.Notify(job, event, details); err != nil {
-			slog.Warn("Webhook notification failed", "job_id", job.ID)
+			slog.Warn("Webhook notification failed", "job_id", job.ID, "error", err)
 		}
 	}
 }
